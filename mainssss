@@ -1,7 +1,7 @@
 
 --// Load Rayfield ---------------------------------------------------------
 -- Updated to v2 source for full compatibility
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))() 
 
 --// Services ---------------------------------------------------------------
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
