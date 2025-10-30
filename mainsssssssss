@@ -1,0 +1,314 @@
+--[[
+    DEMONHUB | BUBBLE GUM SIMULATOR
+    EXECUTOR-FIXED VERSION (Krnl, Fluxus, Delta, etc.)
+    NO MORE "attempt to call a nil value"
+--]]
+
+--// EXECUTOR HTTP FIX
+if not syn then
+    request = request or http_request or (http and http.request)
+end
+
+local HttpGet = syn and syn.request and function(url)
+    local res = syn.request({Url = url, Method = "GET"})
+    return res.Body
+elseif request then
+    local res = request({Url = url, Method = "GET"})
+    return res.Body
+else
+    return game:HttpGet(url, true)
+end
+
+--// SAFE LOAD RAYFIELD
+local Rayfield
+local loadAttempts = 0
+local maxAttempts = 5
+
+repeat
+    loadAttempts += 1
+    local success, result = pcall(function()
+        return loadstring(HttpGet('https://sirius.menu/rayfield'))()
+    end)
+
+    if success and result then
+        Rayfield = result
+        break
+    else
+        warn("Rayfield load failed (attempt " .. loadAttempts .. ") - retrying in 2s...")
+        task.wait(2)
+    end
+until loadAttempts >= maxAttempts
+
+if not Rayfield then
+    error("FAILED TO LOAD RAYFIELD AFTER 5 ATTEMPTS. CHECK YOUR EXPLOIT OR INTERNET.")
+end
+
+--// SERVICES
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players           = game:GetService("Players")
+local HttpService       = game:GetService("HttpService")
+local Workspace         = game:GetService("Workspace")
+local LocalPlayer       = Players.LocalPlayer
+local Lighting          = game:GetService("Lighting")
+local RunService        = game:GetService("RunService")
+local VirtualUser       = game:GetService("VirtualUser")
+
+--// REMOTES
+local RemoteEvent = ReplicatedStorage:WaitForChild("Shared")
+    :WaitForChild("Framework"):WaitForChild("Network")
+    :WaitForChild("Remote"):WaitForChild("RemoteEvent")
+
+local RemoteFunction = ReplicatedStorage:WaitForChild("Shared")
+    :WaitForChild("Framework"):WaitForChild("Network")
+    :WaitForChild("Remote"):WaitForChild("RemoteFunction")
+
+local SpawnPickups     = ReplicatedStorage:WaitForChild("Remotes")
+    :WaitForChild("Pickups"):WaitForChild("SpawnPickups")
+local CollectPickup    = ReplicatedStorage:WaitForChild("Remotes")
+    :WaitForChild("Pickups"):WaitForChild("CollectPickup")
+
+-- =============================================
+-- POTION SYSTEM
+-- =============================================
+
+local function UsePotion(potionName, potionLevel)
+    if potionName and potionLevel then
+        pcall(function()
+            RemoteEvent:FireServer("UsePotion", potionName, potionLevel)
+        end)
+    end
+end
+
+local AllPotions = {
+    {Name = "Coins", Level = 1, DisplayName = "Coins I", Duration = 15},
+    {Name = "Coins", Level = 2, DisplayName = "Coins II", Duration = 15},
+    {Name = "Coins", Level = 3, DisplayName = "Coins III", Duration = 15},
+    {Name = "Coins", Level = 4, DisplayName = "Coins IV", Duration = 20},
+    {Name = "Coins", Level = 5, DisplayName = "Coins V", Duration = 20},
+    {Name = "Coins", Level = 6, DisplayName = "Coins Evolved", Duration = 30},
+    {Name = "Coins", Level = 7, DisplayName = "Coins Infinity", Duration = 30},
+    {Name = "Lucky", Level = 1, DisplayName = "Lucky I", Duration = 15},
+    {Name = "Lucky", Level = 2, DisplayName = "Lucky II", Duration = 15},
+    {Name = "Lucky", Level = 3, DisplayName = "Lucky III", Duration = 15},
+    {Name = "Lucky", Level = 4, DisplayName = "Lucky IV", Duration = 20},
+    {Name = "Lucky", Level = 5, DisplayName = "Lucky V", Duration = 20},
+    {Name = "Lucky", Level = 6, DisplayName = "Lucky Evolved", Duration = 30},
+    {Name = "Lucky", Level = 7, DisplayName = "Lucky Infinity", Duration = 30},
+    {Name = "Speed", Level = 1, DisplayName = "Speed I", Duration = 15},
+    {Name = "Speed", Level = 2, DisplayName = "Speed II", Duration = 15},
+    {Name = "Speed", Level = 3, DisplayName = "Speed III", Duration = 15},
+    {Name = "Speed", Level = 4, DisplayName = "Speed IV", Duration = 20},
+    {Name = "Speed", Level = 5, DisplayName = "Speed V", Duration = 20},
+    {Name = "Speed", Level = 6, DisplayName = "Speed Evolved", Duration = 30},
+    {Name = "Speed", Level = 7, DisplayName = "Speed Infinity", Duration = 30},
+    {Name = "Mythic", Level = 1, DisplayName = "Mythic I", Duration = 15},
+    {Name = "Mythic", Level = 2, DisplayName = "Mythic II", Duration = 15},
+    {Name = "Mythic", Level = 3, DisplayName = "Mythic III", Duration = 15},
+    {Name = "Mythic", Level = 4, DisplayName = "Mythic IV", Duration = 20},
+    {Name = "Mythic", Level = 5, DisplayName = "Mythic V", Duration = 20},
+    {Name = "Mythic", Level = 6, DisplayName = "Mythic Evolved", Duration = 30},
+    {Name = "Mythic", Level = 7, DisplayName = "Mythic Infinity", Duration = 30},
+    {Name = "Tickets", Level = 1, DisplayName = "Tickets I", Duration = 15},
+    {Name = "Tickets", Level = 2, DisplayName = "Tickets II", Duration = 15},
+    {Name = "Tickets", Level = 3, DisplayName = "Tickets III", Duration = 15},
+    {Name = "Tickets", Level = 4, DisplayName = "Tickets IV", Duration = 20},
+    {Name = "Tickets", Level = 5, DisplayName = "Tickets V", Duration = 20},
+    {Name = "Tickets", Level = 6, DisplayName = "Tickets Evolved", Duration = 30},
+    {Name = "Tickets", Level = 7, DisplayName = "Tickets Infinity", Duration = 30},
+    {Name = "Halloween Elixir", Level = 1, DisplayName = "Halloween Elixir I", Duration = 15},
+    {Name = "Halloween Elixir", Level = 2, DisplayName = "Halloween Elixir II", Duration = 20},
+    {Name = "Halloween Elixir", Level = 3, DisplayName = "Halloween Elixir III", Duration = 25},
+    {Name = "Halloween Elixir", Level = 4, DisplayName = "Halloween Elixir IV", Duration = 30},
+    {Name = "Egg Elixir", Level = 1, DisplayName = "Egg Elixir", Duration = 15},
+    {Name = "Secret Elixir", Level = 1, DisplayName = "Secret Elixir", Duration = 15},
+    {Name = "Halloween Infinity Elixir", Level = 1, DisplayName = "Halloween Infinity Elixir", Duration = 30}
+}
+
+local PotionDisplayNames = {}
+for _, p in ipairs(AllPotions) do table.insert(PotionDisplayNames, p.DisplayName) end
+
+local function GetPotionDetails(name)
+    for _, p in ipairs(AllPotions) do
+        if p.DisplayName == name then return p.Name, p.Level, p.Duration end
+    end
+end
+
+--// CREATE WINDOW
+local Window = Rayfield:CreateWindow({
+    Name = "demonhub",
+    LoadingTitle = "demonhub",
+    LoadingSubtitle = "BGS Executor Edition",
+    ConfigurationSaving = { Enabled = true, FolderName = "demonhub" }
+})
+
+--// TABS (TEXT BUTTONS - NO ICONS)
+local UnlocksTab = Window:CreateTab("Unlocks")
+local AutoTab = Window:CreateTab("Automation")
+local EventTab = Window:CreateTab("Event")
+local PerfTab = Window:CreateTab("Performance")
+local WebhookTab = Window:CreateTab("Webhook")
+local PotionsTab = Window:CreateTab("Potions")
+local StatsTab = Window:CreateTab("Stats")
+local MiscTab = Window:CreateTab("Misc")
+
+--// AUTO BUBBLE
+local autoBubbleEnabled = false
+AutoTab:CreateToggle({
+    Name = "Auto Bubble",
+    CurrentValue = false,
+    Callback = function(v)
+        autoBubbleEnabled = v
+        if v then task.spawn(function()
+            while autoBubbleEnabled do
+                pcall(function() RemoteEvent:FireServer("BlowBubble") end)
+                task.wait(0.1)
+            end
+        end) end
+    end
+})
+
+--// AUTO HATCH
+local eggList = {"100M Egg","200M Egg","500M Egg","Atlantis Egg","Aura Egg","Autumn Egg","Beach Egg","Bee Egg","Brainrot Egg","Bruh Egg",
+    "Bunny Egg","Candy Egg","Cartoon Egg","Chance Egg","Classic Egg","Common Egg","Costume Egg","Crystal Egg","Cyber Egg","Dark Egg",
+    "Developer Egg","Dreamer Egg","Duality Egg","Easter Egg","Easter2 Egg","Federation Egg","Fossil Egg","Fruit Egg","Game Egg",
+    "Hell Egg","Icecream Egg","Iceshard Egg","Icy Egg","Inferno Egg","Infinity Egg","Jester Egg","July4th Egg","Lava Egg","Light Egg",
+    "Lunar Egg","Magma Egg","Mining Egg","Mutant Egg","Neon Egg","Nightmare Egg","Pastel Egg","Pirate Egg","Pumpkin Egg","Rainbow Egg",
+    "Season 1 Egg","Season 2 Egg","Season 3 Egg","Season 4 Egg","Season 5 Egg","Season 6 Egg","Season 7 Egg","Season 8 Egg","Season 9 Egg",
+    "Secret Egg","Series 1 Egg","Series 2 Egg","Shadow Egg","Shop Egg","Showman Egg","Silly Egg","Sinister Egg","Spikey Egg","Spooky Egg",
+    "Spotted Egg","Stellaris Egg","Throwback Egg","Underworld Egg","Vine Egg","Void Egg","Voidcrystal Egg"}
+table.sort(eggList)
+
+local selectedEgg = eggList[1]
+local hatchAmount = 1
+local autoHatchEnabled = false
+
+AutoTab:CreateDropdown({ Name = "Select Egg", Options = eggList, CurrentOption = selectedEgg, Callback = function(v) selectedEgg = v[1] end })
+AutoTab:CreateSlider({ Name = "Hatch Amount", Range = {1,15}, Increment = 1, CurrentValue = hatchAmount, Callback = function(v) hatchAmount = v end })
+AutoTab:CreateToggle({ Name = "Auto Hatch", CurrentValue = false, Callback = function(v)
+    autoHatchEnabled = v
+    if v then task.spawn(function()
+        while autoHatchEnabled do
+            pcall(function() RemoteEvent:FireServer("HatchEgg", selectedEgg, hatchAmount) end)
+            task.wait(0.1)
+        end
+    end) end
+end })
+
+--// POTIONS TAB (MANUAL/AUTO BUTTONS)
+local PotionSection = PotionsTab:CreateSection("Mode")
+local AutoModeSection = PotionsTab:CreateSection("Auto Mode")
+local ManualModeSection = PotionsTab:CreateSection("Manual Mode")
+local ManualSchedulesListSection = ManualModeSection:CreateSection("Schedules")
+
+local ModeDropdown = PotionSection:CreateDropdown({
+    Name = "Mode",
+    Options = {"Manual", "Auto"},
+    CurrentValue = "Manual",
+    Callback = function(v)
+        ManualModeSection:SetVisible(v == "Manual")
+        AutoModeSection:SetVisible(v == "Auto")
+    end
+})
+
+ManualModeSection:SetVisible(true)
+AutoModeSection:SetVisible(false)
+
+-- Auto Potions
+local isAutoPotionEnabled = false
+local autoPotionLoops = {}
+local AutoPotionsSelect = AutoModeSection:CreateMultiDropdown({ Name = "Select Potions", Options = PotionDisplayNames, CurrentValue = {}, Callback = function() if isAutoPotionEnabled then StartAuto() end end })
+local AutoPotionToggle = AutoModeSection:CreateToggle({ Name = "Enable Auto", CurrentValue = false, Callback = function(v) isAutoPotionEnabled = v; if v then StartAuto() else StopAuto() end end })
+
+function StopAuto()
+    isAutoPotionEnabled = false
+    for _, t in ipairs(autoPotionLoops) do task.cancel(t) end
+    autoPotionLoops = {}
+end
+
+function StartAuto()
+    StopAuto()
+    isAutoPotionEnabled = true
+    for _, name in ipairs(AutoPotionsSelect.Value) do
+        local n, l, d = GetPotionDetails(name)
+        if n and d then
+            local t = task.spawn(function()
+                while isAutoPotionEnabled do
+                    UsePotion(n, l)
+                    task.wait(d * 60)
+                end
+            end)
+            table.insert(autoPotionLoops, t)
+        end
+    end
+end
+
+-- Manual Schedules
+local ManualSchedules = {}
+ManualModeSection:CreateButton({
+    Name = "Add Schedule",
+    Callback = function()
+        local id = "S_"..tick()
+        local data = {Enabled = false, Timer = 15, Potion = PotionDisplayNames[1], Thread = nil}
+        local sec = ManualSchedulesListSection:CreateSection("Schedule")
+        sec:CreateDropdown({Name="Potion", Options=PotionDisplayNames, CurrentValue=data.Potion, Callback=function(v) data.Potion=v end})
+        sec:CreateInput({Name="Mins", PlaceholderText="15", NumbersOnly=true, CurrentValue=data.Timer, Callback=function(v) data.Timer=tonumber(v) or 15 end})
+        sec:CreateToggle({Name="Enable", CurrentValue=false, Callback=function(v)
+            data.Enabled = v
+            if v then
+                data.Thread = task.spawn(function()
+                    while data.Enabled do
+                        local n, l = GetPotionDetails(data.Potion)
+                        UsePotion(n, l)
+                        task.wait(data.Timer * 60)
+                    end
+                end)
+            else
+                if data.Thread then task.cancel(data.Thread) end
+            end
+        end})
+        sec:CreateButton({Name="Remove", Callback=function() sec:Destroy(); ManualSchedules[id]=nil end})
+        ManualSchedules[id] = data
+    end
+})
+
+--// STATS TAB
+local StatsSection = StatsTab:CreateSection("Hatch Stats")
+local totalHatches = 0
+local hatchLabel = StatsSection:CreateLabel("Total Hatches: 0")
+local petStats = {}
+local PetListSection = StatsTab:CreateSection("Pets")
+
+StatsSection:CreateButton({Name="Clear Stats", Callback=function()
+    petStats = {}
+    PetListSection:Clear()
+end})
+
+--// HATCH LISTENER
+RemoteEvent.OnClientEvent:Connect(function(action, data)
+    if action ~= "HatchEgg" or not data or not data.Pets then return end
+    local pets = data.Pets
+    local count = 0
+    for _, p in ipairs(pets) do
+        if not p.Deleted then
+            count += 1
+            local name = p.Pet.Name or "Unknown"
+            petStats[name] = petStats[name] or {N=0,M=0,S=0,SM=0,T=0}
+            local s = petStats[name]
+            if p.Pet.Shiny and p.Pet.Mythic then s.SM += 1
+            elseif p.Pet.Shiny then s.S += 1
+            elseif p.Pet.Mythic then s.M += 1
+            else s.N += 1 end
+            s.T += 1
+            local txt = string.format("%-18s %-6d %-6d %-6d %-8d %-6d", name, s.N, s.M, s.S, s.SM, s.T)
+            if not s.Label then s.Label = PetListSection:CreateLabel(txt)
+            else s.Label:Set(txt) end
+        end
+    end
+    if count > 0 then
+        totalHatches += count
+        hatchLabel:Set("Total Hatches: " .. totalHatches)
+    end
+end)
+
+--// NOTIFY LOAD
+Rayfield:Notify({Title = "demonhub", Content = "Loaded for Executors!", Duration = 5})
