@@ -1,0 +1,1184 @@
+
+--// Load Rayfield ---------------------------------------------------------
+-- Updated to v2 source for full compatibility
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield/v2/source.lua'))()
+
+--// Services ---------------------------------------------------------------
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players           = game:GetService("Players")
+local HttpService       = game:GetService("HttpService")
+local Workspace         = game:GetService("Workspace")
+local LocalPlayer       = Players.LocalPlayer
+local Lighting          = game:GetService("Lighting")
+local RunService        = game:GetService("RunService")
+local VirtualUser       = game:GetService("VirtualUser")
+
+--// Remotes ---------------------------------------------------------------
+local RemoteEvent = ReplicatedStorage:WaitForChild("Shared")
+    :WaitForChild("Framework"):WaitForChild("Network")
+    :WaitForChild("Remote"):WaitForChild("RemoteEvent")
+
+local RemoteFunction = ReplicatedStorage:WaitForChild("Shared")
+    :WaitForChild("Framework"):WaitForChild("Network")
+    :WaitForChild("Remote"):WaitForChild("RemoteFunction")
+
+local SpawnPickups      = ReplicatedStorage:WaitForChild("Remotes")
+    :WaitForChild("Pickups"):WaitForChild("SpawnPickups")
+local CollectPickup  = ReplicatedStorage:WaitForChild("Remotes")
+    :WaitForChild("Pickups"):WaitForChild("CollectPickup")
+
+-- =============================================
+-- POTION DATA & FUNCTIONS (MERGED)
+-- =============================================
+
+--- Fires the remote event to use a potion.
+-- @param potionName (string) The internal name of the potion (e.g., "Coins").
+-- @param potionLevel (number) The level of the potion (e.g., 1).
+local function UsePotion(potionName, potionLevel)
+    if potionName and potionLevel then
+        -- Uses the BGS script's existing 'RemoteEvent'
+        RemoteEvent:FireServer(
+            "UsePotion",
+            potionName,
+            potionLevel
+        )
+        print("Used Potion:", potionName, "Level:", potionLevel)
+    else
+        warn("Invalid Potion Details:", potionName, potionLevel)
+    end
+end
+
+-- Master list of all potions with their internal and display names
+local AllPotions = {
+    -- Coins
+    {Name = "Coins", Level = 1, DisplayName = "Coins I"},
+    {Name = "Coins", Level = 2, DisplayName = "Coins II"},
+    {Name = "Coins", Level = 3, DisplayName = "Coins III"},
+    {Name = "Coins", Level = 4, DisplayName = "Coins IV"},
+    {Name = "Coins", Level = 5, DisplayName = "Coins V"},
+    {Name = "Coins", Level = 6, DisplayName = "Coins Evolved"},
+    {Name = "Coins", Level = 7, DisplayName = "Coins Infinity"},
+    -- Lucky
+    {Name = "Lucky", Level = 1, DisplayName = "Lucky I"},
+    {Name = "Lucky", Level = 2, DisplayName = "Lucky II"},
+    {Name = "Lucky", Level = 3, DisplayName = "Lucky III"},
+    {Name = "Lucky", Level = 4, DisplayName = "Lucky IV"},
+    {Name = "Lucky", Level = 5, DisplayName = "Lucky V"},
+    {Name = "Lucky", Level = 6, DisplayName = "Lucky Evolved"},
+    {Name = "Lucky", Level = 7, DisplayName = "Lucky Infinity"},
+    -- Speed
+    {Name = "Speed", Level = 1, DisplayName = "Speed I"},
+    {Name = "Speed", Level = 2, DisplayName = "Speed II"},
+    {Name = "Speed", Level = 3, DisplayName = "Speed III"},
+    {Name = "Speed", Level = 4, DisplayName = "Speed IV"},
+    {Name = "Speed", Level = 5, DisplayName = "Speed V"},
+    {Name = "Speed", Level = 6, DisplayName = "Speed Evolved"},
+    {Name = "Speed", Level = 7, DisplayName = "Speed Infinity"},
+    -- Mythic
+    {Name = "Mythic", Level = 1, DisplayName = "Mythic I"},
+    {Name = "Mythic", Level = 2, DisplayName = "Mythic II"},
+    {Name = "Mythic", Level = 3, DisplayName = "Mythic III"},
+    {Name = "Mythic", Level = 4, DisplayName = "Mythic IV"},
+    {Name = "Mythic", Level = 5, DisplayName = "Mythic V"},
+    {Name = "Mythic", Level = 6, DisplayName = "Mythic Evolved"},
+    {Name = "Mythic", Level = 7, DisplayName = "Mythic Infinity"},
+    -- Tickets
+    {Name = "Tickets", Level = 1, DisplayName = "Tickets I"},
+    {Name = "Tickets", Level = 2, DisplayName = "Tickets II"},
+    {Name = "Tickets", Level = 3, DisplayName = "Tickets III"},
+    {Name = "Tickets", Level = 4, DisplayName = "Tickets IV"},
+    {Name = "Tickets", Level = 5, DisplayName = "Tickets V"},
+    {Name = "Tickets", Level = 6, DisplayName = "Tickets Evolved"},
+    {Name = "Tickets", Level = 7, DisplayName = "Tickets Infinity"},
+    -- Halloween Elixir
+    {Name = "Halloween Elixir", Level = 1, DisplayName = "Halloween Elixir I"},
+    {Name = "Halloween Elixir", Level = 2, DisplayName = "Halloween Elixir II"},
+    {Name = "Halloween Elixir", Level = 3, DisplayName = "Halloween Elixir III"},
+    {Name = "Halloween Elixir", Level = 4, DisplayName = "Halloween Elixir IV"},
+    -- Single Level
+    {Name = "Egg Elixir", Level = 1, DisplayName = "Egg Elixir"},
+    {Name = "Secret Elixir", Level = 1, DisplayName = "Secret Elixir"},
+    {Name = "Halloween Infinity Elixir", Level = 1, DisplayName = "Halloween Infinity Elixir"}
+}
+
+-- Create a simple list of display names for dropdowns
+local PotionDisplayNames = {}
+for _, potion in ipairs(AllPotions) do
+    table.insert(PotionDisplayNames, potion.DisplayName)
+end
+
+--- Gets the internal Name and Level from a DisplayName.
+-- @param displayName (string) The UI-facing name (e.g., "Coins I").
+-- @return (string) potionName, (number) potionLevel
+local function GetPotionDetails(displayName)
+    for _, potion in ipairs(AllPotions) do
+        if potion.DisplayName == displayName then
+-           return potion.Name, potion.Level
++           return potion.Name, potion.Level, potion.Duration
+        end
+    end
+-   return nil, nil
++   return nil, nil, nil
+end
+
+--// Rayfield Window -------------------------------------------------------
+local Window = Rayfield:CreateWindow({
+    Name = "demonhub",
+    LoadingTitle = "demonhub",
+    LoadingSubtitle = "sskint",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "demonhub"
+    }
+})
+
+--// Helper: Fire Touch 10 Times --------------------------------------------
+local function fireTouchTenTimes(part)
+    if not part or not part:FindFirstChild("UnlockHitbox") then return end
+    local hitbox = part.UnlockHitbox
+    if not hitbox or not hitbox:FindFirstChild("TouchInterest") then return end
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    for i = 1, 10 do
+        firetouchinterest(root, hitbox, 0); task.wait()
+        firetouchinterest(root, hitbox, 1); task.wait(0.05)
+    end
+end
+
+--// UNLOCKS TAB -----------------------------------------------------------
+local UnlocksTab = Window:CreateTab("Unlocks")
+
+UnlocksTab:CreateButton({
+    Name = "Unlock Overworld",
+    Callback = function()
+        local world = Workspace:FindFirstChild("Worlds") and Workspace.Worlds:FindFirstChild("The Overworld")
+        if not world then Rayfield:Notify({Title="Error",Content="Overworld not found!",Duration=3}); return end
+        local c = 0
+        for _,island in ipairs(world.Islands:GetChildren()) do
+            if island:FindFirstChild("Island") then fireTouchTenTimes(island.Island); c+=1 end
+        end
+        Rayfield:Notify({Title="Unlocked",Content=string.format("Unlocked %d Overworld islands (10x)!",c),Duration=4})
+    end
+})
+
+UnlocksTab:CreateButton({
+    Name = "Unlock Minigame Paradise",
+    Callback = function()
+        local world = Workspace:FindFirstChild("Worlds") and Workspace.Worlds:FindFirstChild("Minigame Paradise")
+        if not world then Rayfield:Notify({Title="Error",Content="Minigame Paradise not found!",Duration=3}); return end
+        local c = 0
+        for _,island in ipairs(world.Islands:GetChildren()) do fireTouchTenTimes(island); c+=1 end
+        Rayfield:Notify({Title="Unlocked",Content=string.format("Unlocked %d Minigame islands (10x)!",c),Duration=4})
+    end
+})
+
+--// AUTOMATION TAB --------------------------------------------------------
+local AutoTab = Window:CreateTab("Automation")
+
+-- Auto Bubble
+local autoBubbleEnabled = false
+AutoTab:CreateToggle({
+    Name = "Auto Bubble",
+    CurrentValue = false,
+    Callback = function(v)
+        autoBubbleEnabled = v
+        if v then task.spawn(function()
+            while autoBubbleEnabled and task.wait(0.1) do
+                RemoteEvent:FireServer("BlowBubble")
+            end
+        end) end
+    end
+})
+
+-- Egg list (ALPHABETICAL ORDER)
+local eggList = {
+    "100M Egg","200M Egg","500M Egg","Atlantis Egg","Aura Egg","Autumn Egg","Beach Egg","Bee Egg","Brainrot Egg","Bruh Egg",
+    "Bunny Egg","Candy Egg","Cartoon Egg","Chance Egg","Classic Egg","Common Egg","Costume Egg","Crystal Egg","Cyber Egg","Dark Egg",
+    "Developer Egg","Dreamer Egg","Duality Egg","Easter Egg","Easter2 Egg","Federation Egg","Fossil Egg","Fruit Egg","Game Egg",
+    "Hell Egg","Icecream Egg","Iceshard Egg","Icy Egg","Inferno Egg","Infinity Egg","Jester Egg","July4th Egg","Lava Egg","Light Egg",
+    "Lunar Egg","Magma Egg","Mining Egg","Mutant Egg","Neon Egg","Nightmare Egg","Pastel Egg","Pirate Egg","Pumpkin Egg","Rainbow Egg",
+    "Season 1 Egg","Season 2 Egg","Season 3 Egg","Season 4 Egg","Season 5 Egg","Season 6 Egg","Season 7 Egg","Season 8 Egg","Season 9 Egg",
+    "Secret Egg","Series 1 Egg","Series 2 Egg","Shadow Egg","Shop Egg","Showman Egg","Silly Egg","Sinister Egg","Spikey Egg","Spooky Egg",
+    "Spotted Egg","Stellaris Egg","Throwback Egg","Underworld Egg","Vine Egg","Void Egg","Voidcrystal Egg"
+}
+table.sort(eggList)
+
+-- Create a Set for fast lookup in Asset Deleter
+local eggNamesSet = {}
+for _, eggName in ipairs(eggList) do eggNamesSet[eggName] = true end
+
+local selectedEgg = eggList[1]  -- STRING, not table
+local hatchAmount = 1
+local autoHatchEnabled = false
+
+AutoTab:CreateDropdown({
+    Name = "Select Egg",
+    Options = eggList,
+    CurrentOption = selectedEgg,
+    Callback = function(v) selectedEgg = v[1] end -- v is a table, v[1] is the string
+})
+
+AutoTab:CreateSlider({
+    Name = "Hatch Amount",
+    Range = {1,15},
+    Increment = 1,
+    CurrentValue = hatchAmount,
+    Callback = function(v) hatchAmount = v end
+})
+
+-- FIXED AUTO HATCH – 100% WORKING
+AutoTab:CreateToggle({
+    Name = "Auto Hatch",
+    CurrentValue = false,
+    Callback = function(v)
+        autoHatchEnabled = v
+        if v then
+            task.spawn(function()
+                while autoHatchEnabled do
+                    RemoteEvent:FireServer("HatchEgg", selectedEgg, hatchAmount)  -- STRING + NUMBER
+                    task.wait(0.1)
+                end
+            end)
+            Rayfield:Notify({
+                Title = "Auto Hatch ON",
+                Content = "Hatching "..selectedEgg.." x"..hatchAmount.." every 0.1s",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Auto Spin
+local autoSpinEnabled = false
+AutoTab:CreateToggle({
+    Name = "Auto Spin Halloween Wheel",
+    CurrentValue = false,
+    Callback = function(v)
+        autoSpinEnabled = v
+        if v then task.spawn(function()
+            while autoSpinEnabled and task.wait(2) do
+                RemoteFunction:InvokeServer("HalloweenWheelSpin")
+            end
+        end)
+        Rayfield:Notify({Title="Auto Spin",Content="Spinning Halloween Wheel!",Duration=3})
+        end
+    end
+})
+
+-- Auto Pickups
+local autoPickupsEnabled = false
+local pickupConnection, pickupQueue = nil,{}
+AutoTab:CreateToggle({
+    Name = "Auto Pickups (0.5s delay)",
+    CurrentValue = false,
+    Callback = function(v)
+        autoPickupsEnabled = v
+        if v then
+            task.spawn(function()
+                while autoPickupsEnabled do
+                    if #pickupQueue>0 then
+                        for _,id in ipairs(pickupQueue) do CollectPickup:FireServer(id) end
+                        pickupQueue={}
+                    end
+                    task.wait(0.5)
+                end
+            end)
+            pickupConnection = SpawnPickups.OnClientEvent:Connect(function(d)
+                if not autoPickupsEnabled or not d then return end
+                for _,p in ipairs(d) do
+                    local id = p.Id or p.id
+                    if id and type(id)=="string" and #id==36 then table.insert(pickupQueue,id) end
+                end
+            end)
+            Rayfield:Notify({Title="Auto Pickups",Content="ON with 0.5s delay",Duration=4})
+        else
+            if pickupConnection then pickupConnection:Disconnect(); pickupConnection=nil end
+            pickupQueue={}
+        end
+    end
+})
+
+-- =============================================
+-- POTIONS TAB (MERGED)
+-- =============================================
+
+local PotionsTab = Window:CreateTab("Potions", "rbxassetid://4483345997")
+local PotionSection = PotionsTab:CreateSection("Potion Management")
+
+-- Sections for each mode
+local AutoModeSection = PotionsTab:CreateSection("Auto Mode")
+local ManualModeSection = PotionsTab:CreateSection("Manual Mode")
+local ManualSchedulesListSection = ManualModeSection:CreateSection("Manual Schedules")
+
+-- Mode switcher
+local ModeDropdown = PotionSection:CreateDropdown({
+    Name = "Select Mode",
+    Options = {"Manual", "Auto"},
+    CurrentValue = "Manual",
+    Flag = "PotionMode",
+    Callback = function(Mode)
+        if Mode == "Manual" then
+            ManualModeSection:SetVisible(true)
+            AutoModeSection:SetVisible(false)
+        else
+            ManualModeSection:SetVisible(false)
+            AutoModeSection:SetVisible(true)
+        end
+    end,
+})
+
+-- Initialize visibility
+ManualModeSection:SetVisible(true)
+AutoModeSection:SetVisible(false)
+
+
+-- -------------------------------------------
+-- Auto Mode UI & Logic
+-- -------------------------------------------
+
+-local autoPotionInterval = 30 -- Default 30 minutes
+local isAutoPotionEnabled = false
++local autoPotionLoops = {} -- Stores the threads for auto-potions
+
+local AutoPotionsSelect = AutoModeSection:CreateMultiDropdown({
+    Name = "Select Potions",
+    Options = PotionDisplayNames,
+    CurrentValue = {},
+    Flag = "AutoPotionsSelected",
+    Callback = function(Selected)
+-       -- Selected is a table of strings
+-       print("Auto-potions selected:", table.concat(Selected, ", "))
++       -- If auto-potions is already enabled, restart the loops to apply the new selection
++       if isAutoPotionEnabled then
++           StartAutoPotionLoops()
++       end
+    end,
+})
+
+-local AutoPotionIntervalInput = AutoModeSection:CreateInput({
+-   Name = "Interval (Mins)",
+-   PlaceholderText = "e.g., 30",
+-   NumbersOnly = true,
+-   CurrentValue = 30,
+-   Flag = "AutoPotionInterval",
+-   Callback = function(Value)
+-       local num = tonumber(Value)
+-       if num and num > 0 then
+-           autoPotionInterval = num
+-           print("Auto-potion interval set to:", autoPotionInterval, "minutes")
+-       else
+-           print("Invalid interval value")
+-       end
+-   end,
+-})
+-
+local AutoPotionToggle = AutoModeSection:CreateToggle({
+    Name = "Enable Auto-Potions",
+    CurrentValue = false,
+    Flag = "AutoPotionToggle",
+    Callback = function(Value)
+        isAutoPotionEnabled = Value
+-       print("Auto-Potions set to:", Value)
++       if Value then
++           StartAutoPotionLoops()
++       else
++           StopAutoPotionLoops()
++       end
+    end,
+})
+
+--- Stops all running auto-potion loops
++function StopAutoPotionLoops()
++   print("Stopping auto-potion loops...")
++   isAutoPotionEnabled = false -- Signal loops to stop
++   for i, thread in ipairs(autoPotionLoops) do
++       task.cancel(thread)
++   end
++   autoPotionLoops = {}
++end
++
++--- Starts auto-potion loops for all selected potions
++function StartAutoPotionLoops()
++   StopAutoPotionLoops() -- Stop existing loops first
++   isAutoPotionEnabled = true
++   
++   local selectedPotions = AutoPotionsSelect.Value
++   if #selectedPotions == 0 then
++       print("Auto-Potions: No potions selected.")
++       return
++   end
++
++   print("Starting auto-potion loops for", #selectedPotions, "potion(s)...")
++
++   for _, displayName in ipairs(selectedPotions) do
++       local potionName, potionLevel, duration = GetPotionDetails(displayName)
++       
++       if potionName and duration then
++           local loopThread = task.spawn(function()
++               print(string.format("Auto-Loop started for %s (%d mins)", displayName, duration))
++               while isAutoPotionEnabled do
++                   -- Use the potion immediately
++                   print(string.format("Auto-Using: %s", displayName))
++                   UsePotion(potionName, potionLevel)
++                   
++                   -- Wait for the duration
++                   task.wait(duration * 60)
++               end
++               print(string.format("Auto-Loop stopped for %s", displayName))
++           end)
++           table.insert(autoPotionLoops, loopThread)
++       else
++           warn(string.format("Could not find details or duration for: %s", displayName))
++       end
++   end
++end
++
+
+-- Auto-potion loop
+-spawn(function()
+-   while task.wait(1) do
+-       if isAutoPotionEnabled then
+-           -- This loop will run every `autoPotionInterval` minutes
+-           local selectedPotions = AutoPotionsSelect.Value
+-           if #selectedPotions > 0 then
+-               print("Auto-Potion: Using selected potions...")
+-               for _, displayName in ipairs(selectedPotions) do
+-                   local potionName, potionLevel = GetPotionDetails(displayName)
+-                   UsePotion(potionName, potionLevel)
+-                   task.wait(0.2) -- Small delay between firing remotes
+-               end
+-           end
+-           
+-           -- Wait for the specified interval
+-           task.wait(autoPotionInterval * 60)
+-       end
+-   end
+-end)
+-
+-
+-- -------------------------------------------
+-- Manual Mode UI & Logic
+-- -------------------------------------------
+
+local ManualSchedules = {} -- Stores data for each manual schedule
+
+local AddScheduleButton = ManualModeSection:CreateButton({
+    Name = "Add Manual Schedule (+)",
+    Callback = function()
+        local scheduleId = "Schedule_" .. os.time() .. "_" .. math.random(1000, 9999)
+        local scheduleData = {
+            Enabled = false,
+            TimerMins = 15,
+            SelectedPotion = PotionDisplayNames[1],
+            Container = nil,
+            LoopThread = nil
+        }
+        
+        -- Create a container for this schedule's controls
+        local ScheduleContainer = ManualSchedulesListSection:CreateSection(scheduleId)
+        scheduleData.Container = ScheduleContainer
+        
+        -- Create controls
+        local PotionDropdown = ScheduleContainer:CreateDropdown({
+            Name = "Potion",
+            Options = PotionDisplayNames,
+            CurrentValue = scheduleData.SelectedPotion,
+            Flag = scheduleId .. "_Potion",
+            Callback = function(Value)
+                scheduleData.SelectedPotion = Value
+            end,
+        })
+        
+        local TimerInput = ScheduleContainer:CreateInput({
+            Name = "Timer (Mins)",
+            PlaceholderText = "e.g., 15",
+            NumbersOnly = true,
+            CurrentValue = scheduleData.TimerMins,
+            Flag = scheduleId .. "_Timer",
+            Callback = function(Value)
+                local num = tonumber(Value)
+                scheduleData.TimerMins = (num and num > 0) and num or 15
+            end,
+        })
+        
+        local EnableToggle = ScheduleContainer:CreateToggle({
+            Name = "Enable",
+            CurrentValue = false,
+            Flag = scheduleId .. "_Enable",
+            Callback = function(Value)
+                scheduleData.Enabled = Value
+                if Value then
+                    -- Start a new loop for this schedule
+                    print("Enabling manual schedule:", scheduleId)
+                    if scheduleData.LoopThread then
+                        task.cancel(scheduleData.LoopThread)
+                    end
+                    scheduleData.LoopThread = task.spawn(function()
+                        while scheduleData.Enabled do
+                            local potionName, potionLevel = GetPotionDetails(scheduleData.SelectedPotion)
+                            print("Manual Schedule (" .. scheduleId .. "): Using", scheduleData.SelectedPotion)
+                            UsePotion(potionName, potionLevel)
+                            
+                            task.wait(scheduleData.TimerMins * 60)
+                        end
+                        print("Disabling manual schedule:", scheduleId)
+                    end)
+                else
+                    -- Stop the loop
+                    if scheduleData.LoopThread then
+                        task.cancel(scheduleData.LoopThread)
+                        scheduleData.LoopThread = nil
+                    end
+                end
+            end,
+        })
+        
+        local RemoveButton = ScheduleContainer:CreateButton({
+            Name = "Remove (x)",
+            Callback = function()
+                -- Stop the loop
+                scheduleData.Enabled = false
+                if scheduleData.LoopThread then
+                    task.cancel(scheduleData.LoopThread)
+                end
+                
+                -- Remove from table
+                ManualSchedules[scheduleId] = nil
+                
+                -- Destroy UI elements
+                ScheduleContainer:Destroy()
+                print("Removed schedule:", scheduleId)
+            end,
+        })
+        
+        -- Store data
+        ManualSchedules[scheduleId] = scheduleData
+    end,
+})
+
+--// EVENT TAB – AUTO HOUSES ------------------------------------------------
+local EventTab = Window:CreateTab("Event")
+
+local isAutoHouses = false
+local standDelay = 1
+local teleportDelay = 0.1
+
+EventTab:CreateToggle({
+    Name = "Auto Houses (Halloween Event)",
+    CurrentValue = false,
+    Callback = function(v) isAutoHouses = v end
+})
+
+EventTab:CreateSlider({
+    Name = "Stand Delay (seconds)",
+    Range = {0.5,5},
+    Increment = 0.1,
+    CurrentValue = standDelay,
+    Callback = function(v) standDelay = v end
+})
+
+EventTab:CreateSlider({
+    Name = "Teleport Delay (seconds)",
+    Range = {0.1,2},
+    Increment = 0.1,
+    CurrentValue = teleportDelay,
+    Callback = function(v) teleportDelay = v end
+})
+
+local function tp(cf) 
+    local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") 
+    if r then r.CFrame = cf end 
+end
+
+local function dist(p) 
+    local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") 
+    if r and p then return (r.Position - p.Position).Magnitude end 
+    return math.huge 
+end
+
+local function claim(part)
+    local base = part.CFrame * CFrame.new(0, 3, 0)
+    local off  = part.CFrame * CFrame.new(5, 3, 0)
+    tp(off); task.wait(0.1); tp(base)
+    for i = 1, math.floor(standDelay) do 
+        if not isAutoHouses then break end 
+        tp(base * CFrame.new(0, i, 0)); task.wait(1) 
+    end
+    if standDelay > math.floor(standDelay) then 
+        task.wait(standDelay - math.floor(standDelay)) 
+    end
+end
+
+task.spawn(function()
+    while true do
+        if not isAutoHouses then task.wait(0.1); continue end
+        local hall = Workspace:FindFirstChild("HalloweenEvent")
+        if not hall then task.wait(1); continue end
+        local houses = hall:FindFirstChild("Houses")
+        if not houses then task.wait(1); continue end
+        local list = {}
+        for _, h in ipairs(houses:GetChildren()) do
+            local act = h:FindFirstChild("Activation")
+            if act and act:FindFirstChild("Active") and act.Active.Value then
+                local p = act.PrimaryPart or act:FindFirstChildWhichIsA("BasePart")
+                if p then table.insert(list, {house = h, dist = dist(p)}) end
+            end
+        end
+        table.sort(list, function(a, b) return a.dist < b.dist end)
+        for _, v in ipairs(list) do
+            if not isAutoHouses then break end
+            local act = v.house:FindFirstChild("Activation")
+            if act then
+                local p = act.PrimaryPart or act:FindFirstChildWhichIsA("BasePart")
+                if p then claim(p) end
+            end
+        end
+        task.wait(teleportDelay)
+    end
+end)
+
+--// PERFORMANCE TAB ----------------------------------------------------
+local PerfTab = Window:CreateTab("Performance")
+
+-- FPS Limiter
+local limitFpsEnabled = false
+local targetFps = 30
+PerfTab:CreateToggle({
+    Name = "Enable FPS Limiter",
+    CurrentValue = false,
+    Callback = function(v)
+        limitFpsEnabled = v
+        Rayfield:Notify({Title="FPS Limiter", Content=v and "ON" or "OFF", Duration=2})
+    end
+})
+
+PerfTab:CreateSlider({
+    Name = "Target FPS",
+    Range = {15, 60},
+    Increment = 1,
+    CurrentValue = targetFps,
+    Callback = function(v) targetFps = v end
+})
+
+-- FPS Limiter Loop
+task.spawn(function()
+    while true do
+        if limitFpsEnabled then
+            local t = 1/targetFps
+            local dt = RunService.Heartbeat:Wait()
+            if dt < t then
+                task.wait(t - dt)
+            end
+        else
+            RunService.Heartbeat:Wait()
+        end
+    end
+end)
+
+-- Low Quality Button
+PerfTab:CreateButton({
+    Name = "Set Low Quality (Anti-Lag)",
+    Callback = function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        Rayfield:Notify({Title="Anti-Lag", Content="Graphics set to Low Quality!", Duration=3})
+    end
+})
+
+-- Toggle Rendering
+local renderEnabled = true
+local originalLighting = nil
+local originalTerrainDeco = nil
+local originalQuality = nil
+local originalsCaptured = false
+
+PerfTab:CreateToggle({
+    Name = "Toggle Full Render",
+    CurrentValue = true,
+    Callback = function(v)
+        if not originalsCaptured then
+            local success, err = pcall(function()
+                originalLighting = { 
+                    Technology = Lighting.Technology, 
+                    GlobalShadows = Lighting.GlobalShadows 
+                }
+                originalTerrainDeco = Workspace.Terrain.Decoration
+                originalQuality = settings().Rendering.QualityLevel
+                originalsCaptured = true
+            end)
+            if not success then
+                Rayfield:Notify({Title="Error", Content="Could not capture render settings.", Duration=4})
+                return
+            end
+        end
+
+        renderEnabled = v
+        if not v then
+            Lighting.Technology = Enum.Technology.Compatibility 
+            Lighting.GlobalShadows = false
+            Workspace.Terrain.Decoration = false
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+            Rayfield:Notify({Title="Render", Content="OFF", Duration=2})
+        else
+            Lighting.Technology = originalLighting.Technology 
+            Lighting.GlobalShadows = originalLighting.GlobalShadows
+            Workspace.Terrain.Decoration = originalTerrainDeco
+            settings().Rendering.QualityLevel = originalQuality
+            Rayfield:Notify({Title="Render", Content="ON", Duration=2})
+        end
+    end
+})
+
+-- Disable Shadows
+local originalShadows = Lighting.GlobalShadows
+PerfTab:CreateToggle({
+    Name = "Disable Shadows",
+    CurrentValue = false,
+    Callback = function(v)
+        if v then
+            Lighting.GlobalShadows = false
+            Rayfield:Notify({Title="Shadows", Content="OFF", Duration=2})
+        else
+            Lighting.GlobalShadows = originalShadows
+            Rayfield:Notify({Title="Shadows", Content="Restored", Duration=2})
+        end
+    end
+})
+
+-- Disable Particles
+PerfTab:CreateButton({
+    Name = "Disable All Particles",
+    Callback = function()
+        local c = 0
+        for _, v in ipairs(Workspace:GetDescendants()) do 
+            if v:IsA("ParticleEmitter") then 
+                v.Enabled = false 
+                c = c + 1
+            end 
+        end
+        Rayfield:Notify({Title="Particles", Content="Disabled "..c.." particles.", Duration=3})
+    end
+})
+
+-- Disable Animations
+PerfTab:CreateButton({
+    Name = "Disable Animations",
+    Callback = function()
+        local animCount = 0
+        local animatorCount = 0
+        for _, v in ipairs(Workspace:GetDescendants()) do
+            if v:IsA("Animation") then
+                v:Destroy()
+                animCount = animCount + 1
+            elseif v:IsA("Animator") then
+                local isPlayer = false
+                if LocalPlayer.Character then
+                    isPlayer = v:IsDescendantOf(LocalPlayer.Character)
+                end
+                
+                if not isPlayer then
+                    v:Destroy()
+                    animatorCount = animatorCount + 1
+                end
+            end
+        end
+        Rayfield:Notify({Title="Animations", Content=string.format("Removed %d anims & destroyed %d animators.", animCount, animatorCount), Duration=3})
+    end
+})
+
+-- Disable Sounds
+PerfTab:CreateButton({
+    Name = "Disable World Sounds",
+    Callback = function()
+        local c = 0
+        for _, v in ipairs(Workspace:GetDescendants()) do 
+            if v:IsA("Sound") then 
+                v:Destroy()
+                c = c + 1
+            end 
+        end
+        Rayfield:Notify({Title="Sounds", Content="Disabled "..c.." sounds.", Duration=3})
+    end
+})
+
+-- Disable Textures
+PerfTab:CreateButton({
+    Name = "Disable Textures & Decals",
+    Callback = function()
+        local c = 0
+        for _, v in ipairs(Workspace:GetDescendants()) do 
+            if v:IsA("BasePart") then
+                v.Material = Enum.Material.SmoothPlastic
+                v.Reflectance = 0
+            elseif v:IsA("Decal") or v:IsA("Texture") then 
+                v:Destroy()
+                c = c + 1
+            end 
+        end
+        Rayfield:Notify({Title="Textures", Content="Set material to plastic & removed "..c.." decals/textures.", Duration=3})
+    end
+})
+
+-- Asset Deleter
+local function deleteAssets()
+    local partsToDelete = {}
+    for _, v in ipairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("Decal") or v:IsA("Texture") or v:IsA("MeshPart") then
+            local keep = false
+            
+            -- Keep Local Player
+            if v:IsDescendantOf(LocalPlayer.Character) then keep = true end
+            
+            -- Keep other players
+            if not keep then
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer and p.Character and v:IsDescendantOf(p.Character) then
+                        keep = true
+                        break
+                    end
+                end
+            end
+            
+            -- Keep Egg Models (based on eggList)
+            if not keep then
+                local current = v
+                while current and current ~= Workspace do
+                    if eggNamesSet[current.Name] then
+                        keep = true
+                        break
+                    end
+                    current = current.Parent
+                end
+            end
+
+            if not keep then
+                table.insert(partsToDelete, v)
+            end
+        end
+    end
+    
+    Rayfield:Notify({Title="Asset Deleter", Content="Deleting " .. #partsToDelete .. " assets...", Duration=3})
+    for _, v in ipairs(partsToDelete) do
+        pcall(function() v:Destroy() end)
+    end
+    Rayfield:Notify({Title="Asset Deleter", Content="Done!", Duration=2})
+end
+
+PerfTab:CreateButton({
+    Name = "Delete Un-needed Assets",
+    Callback = deleteAssets
+})
+
+--// WEBHOOK TAB ----------------------------------------------------
+local WebhookTab = Window:CreateTab("Webhook")
+
+local webhookUrl = ""
+local webhookEnabled = false
+local webhookQueue = {}
+local lastSent = 0
+
+local function fixUrl(u)
+    return u:gsub("%s",""):gsub("^https?://discordapp%.com/", "https://discord.com/")
+end
+
+WebhookTab:CreateInput({
+    Name = "Discord Webhook URL",
+    PlaceholderText = "https://discord.com/api/webhooks/...",
+    Callback = function(t) webhookUrl = fixUrl(t) end
+})
+
+WebhookTab:CreateButton({
+    Name = "Save Webhook URL",
+    Callback = function()
+        webhookUrl = fixUrl(webhookUrl)
+        Rayfield:Notify({Title="Saved", Content="Webhook URL saved!", Duration=2})
+    end
+})
+
+WebhookTab:CreateButton({
+    Name = "Test Webhook",
+    Callback = function()
+        if webhookUrl == "" or not webhookUrl:match("^https://discord%.com/api/webhooks/") then
+            Rayfield:Notify({Title="Error", Content="Invalid URL!", Duration=3})
+            return
+        end
+        table.insert(webhookQueue, {type="text", content="Test from demonhub! request() WORKS!"})
+        Rayfield:Notify({Title="Test Queued", Content="Sending via request()...", Duration=3})
+    end
+})
+
+WebhookTab:CreateToggle({
+    Name = "Enable Hatch Webhook",
+    CurrentValue = false,
+    Callback = function(v)
+        webhookEnabled = v
+        Rayfield:Notify({Title="Webhook", Content=v and "ON" or "OFF", Duration=2})
+    end
+})
+
+-- =============================================
+-- STATS TAB (NEW)
+-- =============================================
+local StatsTab = Window:CreateTab("Stats")
+
+local StatsSection = StatsTab:CreateSection("Hatch Statistics")
+
+-- Total hatches (moved from Misc)
+local totalHatches = 0
+local hatchCounterLabel = StatsSection:CreateLabel("Total Hatches: 0")
+
+StatsSection:CreateLabel(" ") -- Spacer
+
+-- Pet stats table
+local petStats = {}
+StatsSection:CreateLabel("Pet Name           | Normal | Mythic | Shiny  | S. Mythic | Total")
+local PetStatsListSection = StatsTab:CreateSection("Pet List")
+
+StatsSection:CreateButton({
+    Name = "Clear Stats",
+    Callback = function()
+        petStats = {}
+        PetStatsListSection:Clear()
+        Rayfield:Notify({Title="Stats", Content="Pet stats cleared!", Duration=3})
+    end
+})
+
+
+--// MISC TAB ----------------------------------------------------
+local MiscTab = Window:CreateTab("Misc")
+
+-- Anti-Idle
+local antiIdleConnection = nil
+MiscTab:CreateToggle({
+    Name = "Anti-Idle (Jumps)",
+    CurrentValue = false,
+    Callback = function(v)
+        if v and not antiIdleConnection then
+            antiIdleConnection = LocalPlayer.Idled:Connect(function()
+                LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
+            end)
+            Rayfield:Notify({Title="Anti-Idle", Content="ON", Duration=2})
+        elseif not v and antiIdleConnection then
+            antiIdleConnection:Disconnect()
+            antiIdleConnection = nil
+            Rayfield:Notify({Title="Anti-Idle", Content="OFF", Duration=2})
+        end
+    end
+})
+
+-- ADDED: Auto Clicker
+local autoClickerDelay = 100 -- ms
+local autoClickerEnabled = false
+
+MiscTab:CreateSlider({
+    Name = "Auto Clicker Delay (ms)",
+    Range = {10, 2000},
+    Increment = 10,
+    CurrentValue = autoClickerDelay,
+    Callback = function(v) autoClickerDelay = v end
+})
+
+MiscTab:CreateToggle({
+    Name = "Auto Clicker (Middle of Screen)",
+    CurrentValue = false,
+    Callback = function(v)
+        autoClickerEnabled = v
+        if v then
+            task.spawn(function()
+                while autoClickerEnabled do
+                    if not Workspace.CurrentCamera then
+                        -- Wait if camera isn't loaded
+                        task.wait(1) 
+                    else
+                        local viewportSize = Workspace.CurrentCamera.ViewportSize
+                        local centerScreen = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+                        
+                        -- Fire a click at the center of the screen
+                        VirtualUser:ClickButton1(centerScreen)
+                        
+                        -- Wait for the delay
+                        task.wait(autoClickerDelay / 1000)
+                    end
+                end
+            end)
+            Rayfield:Notify({Title="Auto Clicker", Content="ON", Duration=2})
+        else
+            Rayfield:Notify({Title="Auto Clicker", Content="OFF", Duration=2})
+        end
+    end
+})
+
+
+--// request() SEND FUNCTIONS -----------------------------------------------
+local function SendMessage(url, message)
+    if not url or url == "" then return end
+    local data = {content = message}
+    local body = HttpService:JSONEncode(data)
+    local ok, resp = pcall(function()
+        return request({
+            Url = url,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = body
+        })
+    end)
+    
+    if ok and resp.StatusCode >= 200 and resp.StatusCode < 300 then
+        Rayfield:Notify({Title="Sent", Content="Message sent!", Duration=2})
+    else
+        Rayfield:Notify({Title="Failed", Content="Check URL or exploit.", Duration=4})
+    end
+end
+
+local function SendMessageEMBED(url, embed)
+    if not url or url == "" then return end
+    local data = {
+        embeds = {{
+            title = embed.title,
+            description = embed.description,
+            color = embed.color,
+            fields = embed.fields,
+            footer = {text = embed.footer.text},
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z"),
+            thumbnail = embed.thumbnail
+        }}
+    }
+    local body = HttpService:JSONEncode(data)
+    local ok, resp = pcall(function()
+        return request({
+            Url = url,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = body
+        })
+    end)
+    
+    if ok and resp.StatusCode >= 200 and resp.StatusCode < 300 then
+        Rayfield:Notify({Title="Sent", Content="Embed sent!", Duration=2})
+    else
+        Rayfield:Notify({Title="Failed", Content="Embed failed.", Duration=4})
+    end
+end
+
+-- Queue processor (5s delay)
+task.spawn(function()
+    while true do
+        if #webhookQueue > 0 and tick() - lastSent >= 5 then
+            local item = table.remove(webhookQueue, 1)
+            if item.type == "text" then
+                SendMessage(webhookUrl, item.content)
+            elseif item.type == "embed" then
+                SendMessageEMBED(webhookUrl, item.embed)
+            end
+            lastSent = tick()
+        end
+        task.wait(1)
+    end
+end)
+
+-- Queue hatch embed
+local function queueHatchEmbed(eggName, petList)
+    if not webhookEnabled or #petList == 0 then return end
+    local embed = {
+        title = "Hatched "..eggName,
+        description = "You hatched **"..#petList.."** pet"..(#petList>1 and "s" or "").."!",
+        color = 0x00ff00,
+        fields = {},
+        footer = {text = "Player: "..LocalPlayer.Name},
+        thumbnail = {url = "https://www.roblox.com/headshot-thumbnail/image?userId="..LocalPlayer.UserId.."&width=150&height=150&format=png"}
+    }
+    for i, pet in ipairs(petList) do
+        table.insert(embed.fields, {name = "Pet #"..i, value = pet, inline = true})
+    end
+    table.insert(webhookQueue, {type = "embed", embed = embed})
+end
+
+-- Hatch listener
+RemoteEvent.OnClientEvent:Connect(function(action, data)
+    if action ~= "HatchEgg" then return end
+    
+    local eggName = "Unknown Egg"
+    local petsForWebhook = {}
+    local totalPetsInHatch = 0
+    
+    if typeof(data) == "table" then
+        eggName = data.Name or eggName
+        
+        -- FIXED: Get total count *first*, regardless of deleted status
+        totalPetsInHatch = #(data.Pets or {})
+        
+        -- Build the webhook list (which only includes non-deleted pets)
+        for _, pd in ipairs(data.Pets or {}) do
+            if not pd.Deleted then
+                local p = pd.Pet
+                local label = p.Name or "Unknown"
+                local tags = {}
+                if p.Shiny then table.insert(tags, "Shiny") end
+                if p.Mythic then table.insert(tags, "Mythic") end
+                if #tags > 0 then label = label.." **"..table.concat(tags, " ").."**" end
+                table.insert(petsForWebhook, label)
+
+                -- =======================================
+                -- NEW STATS LOGIC
+                -- =======================================
+                local petName = p.Name or "Unknown"
+                if not petStats[petName] then
+                    -- Create new entry if it doesn't exist
+                    petStats[petName] = {Normal=0, Mythic=0, Shiny=0, ShinyMythic=0, Total=0, LabelElement=nil}
+                end
+                
+                local stats = petStats[petName]
+                
+                -- Increment the correct counter
+                if p.Shiny and p.Mythic then
+                    stats.ShinyMythic = stats.ShinyMythic + 1
+                elseif p.Shiny then
+                    stats.Shiny = stats.Shiny + 1
+                elseif p.Mythic then
+                    stats.Mythic = stats.Mythic + 1
+                else
+                    stats.Normal = stats.Normal + 1
+                end
+                stats.Total = stats.Total + 1
+                
+                -- Format the label string to look like a table row
+                local labelText = string.format("%-18s %-7d %-7d %-7d %-10d %-7d", petName, stats.Normal, stats.Mythic, stats.Shiny, stats.ShinyMythic, stats.Total)
+                
+                -- Create or update the label
+                if not stats.LabelElement or not stats.LabelElement.Object then
+                    -- Create a new label if one doesn't exist
+                    stats.LabelElement = PetStatsListSection:CreateLabel(labelText)
+                else
+                    -- Update the existing label
+                    stats.LabelElement:Set(labelText)
+                end
+                -- =======================================
+                -- END STATS LOGIC
+                -- =======================================
+
+            end
+        end
+    end
+    
+    -- Update total hatch counter (this label is now in StatsTab)
+    if totalPetsInHatch > 0 then
+        totalHatches = totalHatches + totalPetsInHatch
+        hatchCounterLabel:Set("Total Hatches: " .. totalHatches)
+    end
+    
+    -- Send to webhook (if enabled and if there are any non-deleted pets to show)
+    if webhookEnabled and #petsForWebhook > 0 then
+        queueHatchEmbed(eggName, petsForWebhook)
+    end
+end)
+
+--// Cleanup
+if pickupConnection then pickupConnection:Disconnect() end
+if antiIdleConnection then antiIdleConnection:Disconnect() end
+
+--// LOADED
+Rayfield:Notify({
+    Title = "demonhub LOADED",
+    Content = "BGSI Script Hub",
+    Duration = 6
+})
+
